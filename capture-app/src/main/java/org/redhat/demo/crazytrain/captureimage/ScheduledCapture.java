@@ -227,7 +227,8 @@ public class ScheduledCapture {
         stopRequested = false;
 		// Do the command to restart the service here 
 		String[] command = {"ls", "-la"};
-        //exec('oc -n train rollout restart deployment/train-controller --kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig', (error, stdout, stderr) => {
+		//String[] command = {"oc", "-n", "train", "rollout", "restart", "deployment/train-controller", "--kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig"};
+ 
 			try {
             // Create the process builder
             ProcessBuilder processBuilder = new ProcessBuilder(command);
