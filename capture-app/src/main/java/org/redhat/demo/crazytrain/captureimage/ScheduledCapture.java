@@ -217,6 +217,27 @@ public class ScheduledCapture {
         timerId = vertx.setPeriodic(periodicCapture, id -> captureAndSaveImage());
         return Response.ok("Capture started").build();
     }
+	
+	@POST
+    @Path("/connectReconnect")
+    public Response connectReconnect() {
+        LOGGER.info("connectReconnect started");
+        stopRequested = false;
+		// Do the command to restart the service here 
+		const { exec } = require('child_process');
+        exec('oc -n train rollout restart deployment/train-controller --kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig', (error, stdout, stderr) => {
+			if (error) {
+				onsole.error(`Execution Error: ${error.message}`);
+				return;
+			}
+			if (stderr) {
+				console.error(`Standard Error: ${stderr}`);
+				return;
+			}
+			console.log(`Output:\n${stdout}`);
+		});
+        return Response.ok("Capture restarted ").build();
+    }
 
     @POST
     @Path("/test")
