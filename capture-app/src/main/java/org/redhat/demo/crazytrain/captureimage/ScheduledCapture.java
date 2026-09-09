@@ -26,7 +26,9 @@ import org.redhat.demo.crazytrain.util.Util;
 import io.quarkus.runtime.StartupEvent;
 import io.quarkus.scheduler.Scheduled;
 import io.vertx.mutiny.core.Vertx;
-
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.IOException;
 
 /**
  * ScheduledCapture is a service that captures images from a camera using the OpenCV library
@@ -224,18 +226,35 @@ public class ScheduledCapture {
         LOGGER.info("connectReconnect started");
         stopRequested = false;
 		// Do the command to restart the service here 
-		const { exec } = require('child_process');
-        exec('oc -n train rollout restart deployment/train-controller --kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig', (error, stdout, stderr) => {
-			if (error) {
-				onsole.error(`Execution Error: ${error.message}`);
-				return;
-			}
-			if (stderr) {
-				console.error(`Standard Error: ${stderr}`);
-				return;
-			}
-			console.log(`Output:\n${stdout}`);
-		});
+		String[] command = {"ls", "-la"};
+        //exec('oc -n train rollout restart deployment/train-controller --kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig', (error, stdout, stderr) => {
+			try {
+            // Create the process builder
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            
+            // Start the process
+            Process process = processBuilder.start();
+
+            // Read the output from the command
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println(line);
+                }
+            }
+
+            // Wait for the process to complete and get the exit code
+            int exitCode = process.waitFor();
+            System.out.println("\nProcess exited with code: " + exitCode);
+
+        } catch (IOException e) {
+            System.err.println("Command execution failed: " + e.getMessage());
+        } catch (InterruptedException e) {
+            System.err.println("Process was interrupted: " + e.getMessage());
+            Thread.currentThread().interrupt(); // Restore interrupted status
+        }
+
         return Response.ok("Capture restarted ").build();
     }
 
