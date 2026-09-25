@@ -79,7 +79,8 @@ public class ScheduledCapture {
     int videoPeriodicCapture;
 
     MqttPublisher mqttPublisher = null;
-
+    MqttPublisher mqttPublisherMovement = null;
+    
     private Long timerId;
 
     private volatile boolean stopRequested = false;
@@ -226,8 +227,8 @@ public class ScheduledCapture {
         LOGGER.info("connectReconnect started");
         stopRequested = false;
 		// Do the command to restart the service here 
-		String[] command = {"ls", "-la"};
-		//String[] command = {"oc", "-n", "train", "rollout", "restart", "deployment/train-controller", "--kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig"};
+	//	String[] command = {"ls", "-la"};
+		String[] command = {"oc", "-n", "train", "rollout", "restart", "deployment/train-controller", "--kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig"};
  
 			try {
             // Create the process builder
@@ -286,7 +287,27 @@ public class ScheduledCapture {
             }
             testThread = null;
         }
-        return Response.ok("Stop requested").build();       
+        return Response.ok("Stop requested").build();
+    }
+    
+    @POST
+    @Path("/stopMovement")
+    public Response stopMovement() {
+
+
+	
+        return Response.ok("Stop Movement requested").build();
+    }
+    
+    @POST
+    @Path("/startMovement")
+    public Response startMovement() {
+        LOGGER.info("Start movement requested");
+       
+        
+        return Response.ok("Start movement requested").build();
+    }
+
         // if (timerId == null) {
         //     return Response.status(Response.Status.BAD_REQUEST).entity("Capture is not running").build();
         // }else if(timerId != null){
@@ -297,5 +318,5 @@ public class ScheduledCapture {
         // LOGGER.info("Camera released");
         // mqttPublisher.disconnect();
         // LOGGER.info("MQTT disconnected");
-    }
 }
+//}
