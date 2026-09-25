@@ -227,8 +227,8 @@ public class ScheduledCapture {
         LOGGER.info("connectReconnect started");
         stopRequested = false;
 		// Do the command to restart the service here 
-		String[] command = {"ls", "-la"};
-		//String[] command = {"oc", "-n", "train", "rollout", "restart", "deployment/train-controller", "--kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig"};
+		//String[] command = {"ls", "-la"};
+		String[] command = {"oc", "-n", "train", "rollout", "restart", "deployment/train-controller", "--kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig"};
  
 			try {
             // Create the process builder
