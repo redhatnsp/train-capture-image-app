@@ -227,8 +227,8 @@ public class ScheduledCapture {
         LOGGER.info("connectReconnect started");
         stopRequested = false;
 		// Do the command to restart the service here 
-	//	String[] command = {"ls", "-la"};
-		String[] command = {"oc", "-n", "train", "rollout", "restart", "deployment/train-controller", "--kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig"};
+		String[] command = {"ls", "-la"};
+		//String[] command = {"oc", "-n", "train", "rollout", "restart", "deployment/train-controller", "--kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig"};
  
 			try {
             // Create the process builder
@@ -293,7 +293,37 @@ public class ScheduledCapture {
     @POST
     @Path("/stopMovement")
     public Response stopMovement() {
+                LOGGER.info("Stop movement requested");
+		// Do the command to start the train moving here 
+		String[] command = {"mosquitto_pub", "-h", "localhost", "-p", "1883",
+				    "-t", "train-command", "-m", "3"};
+ 
+			try {
+            // Create the process builder
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            
+            // Start the process
+            Process process = processBuilder.start();
 
+            // Read the output from the command
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println(line);
+                }
+            }
+
+            // Wait for the process to complete and get the exit code
+            int exitCode = process.waitFor();
+            System.out.println("\nProcess exited with code: " + exitCode);
+
+        } catch (IOException e) {
+            System.err.println("Command execution failed: " + e.getMessage());
+        } catch (InterruptedException e) {
+            System.err.println("Process was interrupted: " + e.getMessage());
+            Thread.currentThread().interrupt(); // Restore interrupted status
+        }
 
 	
         return Response.ok("Stop Movement requested").build();
@@ -303,7 +333,36 @@ public class ScheduledCapture {
     @Path("/startMovement")
     public Response startMovement() {
         LOGGER.info("Start movement requested");
-       
+		// Do the command to start the train moving here 
+		String[] command = {"mosquitto_pub", "-h", "localhost", "-p", "1883",
+				    "-t", "train-command", "-m", "2"};
+ 
+			try {
+            // Create the process builder
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            
+            // Start the process
+            Process process = processBuilder.start();
+
+            // Read the output from the command
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println(line);
+                }
+            }
+
+            // Wait for the process to complete and get the exit code
+            int exitCode = process.waitFor();
+            System.out.println("\nProcess exited with code: " + exitCode);
+
+        } catch (IOException e) {
+            System.err.println("Command execution failed: " + e.getMessage());
+        } catch (InterruptedException e) {
+            System.err.println("Process was interrupted: " + e.getMessage());
+            Thread.currentThread().interrupt(); // Restore interrupted status
+        }
         
         return Response.ok("Start movement requested").build();
     }
