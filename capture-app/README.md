@@ -4,72 +4,148 @@
 
 # Capture-App
 
-Capture-App is a RESTful web service built with Quarkus that allows you to start and stop video capture.
+Capture-App is a Quarkus service that grabs frames from the train's webcam, encodes them,
+and publishes them over MQTT for Intelligent-Train to run the model against. It is the
+first stage of the pipeline.
+
+**It does not start capturing when it boots.** Capture runs only after something calls
+`POST /capture/start`, which normally arrives from the monitoring app's button, routed
+through Kafka and the second Camel route in `train-ceq-app`. A freshly started pod that
+appears to be doing nothing is usually working as designed.
+
 ## Prerequisites
 
-- **OpenCV**: Capture-App uses OpenCV for video processing. You need to have OpenCV installed on your machine to run Capture-App.
-- **MQTT Broker**: Capture-App uses MQTT for messaging. You need to have an MQTT broker running and accessible to Capture-App. The MQTT broker's URL should be specified in the `mqtt.broker.url` property in the `application.properties` file.
-- **Video File**: If you want to use the test mode where Capture-App reads video from a file, you need to have a video file available and its path should be specified in the `videoPath` property in the `application.properties` file.
+- **MQTT broker** — reachable at `MQTT_BROKER` (default `tcp://localhost:1883`). Every
+  component talks to the same broker; the setup is documented once, in
+  [train-controller](https://github.com/redhatnsp/train-controller#local-installation).
+- **A camera**, unless running in mock mode (see [Test mode](#test-mode)).
 
-## Related Modules
+OpenCV does not need to be installed separately — it comes from the
+`io.quarkiverse.opencv:quarkus-opencv` extension declared in `pom.xml`.
 
-Capture-App is part of a larger system that includes the following microservices:
-- **intelligent-train**: This microservice is responsible for making predictions based on the data received from the Capture-App.
-- **train-ceq-app**: This microservice is responsible for post-processing the raw predictions made by the Intelligent-Train module, transforming them into actionable insights.
-- **train-monitoring-app**: This microservice is responsible for receiving the CloudEvent from Train-CEQ-App via Kafka and using this information for monitoring and visualization purposes.
-- **train-controller**: This microservice is responsible for receiving decisions from Train-CEQ-App and controlling the operation of the train accordingly.
+## What it publishes
+
+Frames go to the `train-image` topic as JSON:
+
+```json
+{ "id": 1728234567890, "image": "<base64>" }
+```
+
+`id` is `System.currentTimeMillis()`. The image is **WebP** at quality 80, despite the
+`.jpg` extension used when `SAVE_IMAGE` is enabled.
+
+## Configuration
+
+Set through environment variables, resolved in `src/main/resources/application.properties`.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MQTT_BROKER` | `tcp://localhost:1883` | MQTT broker URL |
+| `MQTT_TOPIC` | `train-image` | Topic frames are published to |
+| `PERIODIC_CAPTURE` | `30` | Milliseconds between captures once started |
+| `INTERVAL` | `100` | Capture interval property |
+| `VIDE0_DEVICE_INDEX` | `0` | OpenCV camera index. **Note the spelling** — the property name contains a zero, not the letter O |
+| `MOCK` | `false` | Skip camera initialisation and serve frames from a file instead |
+| `VIDEO_PATH` | `/deployments/data/track-stop-and-slowdown.avi` | Video used by `/capture/test` |
+| `VIDEO_PERIODIC_CAPTURE` | `30` | Frame pacing for the file reader |
+| `SAVE_IMAGE` | `false` | Also write each frame to `TMP_FOLDER` |
+| `TMP_FOLDER` | `/Users/mouchan/crazy-train-images` | Where frames are written when `SAVE_IMAGE` is on. The default is a leftover personal path; set it if you enable saving |
+| `DROPBOX_TOKEN` | `null` | Unused by the capture flow |
+| `LOGGER_LEVEL` | `INFO` | Root log level |
+
+HTTP port is **8082 in dev mode** and **8080 in the container**.
 
 ## Endpoints
 
-- `POST /capture/start`: Starts the video capture. If the capture is already running, it returns a 400 Bad Request response.
-- `POST /capture/stop`: Stops the video capture.
-- `POST /capture/test`: Starts reading video from a file. If the capture is already running, it returns a 400 Bad Request response.
+| Endpoint | Effect |
+|---|---|
+| `POST /capture/start` | Starts the periodic capture timer. Returns 400 if already running |
+| `POST /capture/stop` | Requests a stop; the timer cancels itself on the next tick |
+| `POST /capture/test` | Reads frames from `VIDEO_PATH` in a loop instead of the camera. Returns 400 if already running |
+| `POST /capture/connectReconnect` | Restarts the `train-controller` deployment — see below |
+| `POST /capture/startMovement` | Publishes command `2` (start train) to `train-command` |
+| `POST /capture/stopMovement` | Publishes command `3` (stop train) to `train-command` |
 
+### Train control endpoints
+
+The last three automate steps that are otherwise done by hand over SSH during a demo.
+They work by shelling out with `ProcessBuilder` rather than going through the
+application's own MQTT client, which carries some caveats worth knowing:
+
+- `connectReconnect` runs
+  `oc -n train rollout restart deployment/train-controller --kubeconfig=/var/lib/microshift/resources/kubeadmin/kubeconfig`.
+  **Neither Dockerfile installs `oc`**, so in a container this fails with
+  `Cannot run program "oc"` — and the endpoint still returns **HTTP 200**. Check the pod
+  logs rather than the response code to tell whether it worked.
+- `startMovement` and `stopMovement` run `mosquitto_pub` against a **hardcoded
+  `localhost:1883`**, ignoring `MQTT_BROKER`. They only reach the broker when it shares
+  the pod's network namespace. The `mosquitto` package is installed by the Dockerfiles
+  for this purpose.
+- These endpoints are unauthenticated, and `connectReconnect` carries cluster-admin
+  rights via that kubeconfig. Anything that can reach the service port can restart
+  deployments.
+
+Commands `2` and `3` exist only here — the model emits class ids `0` and `1` only, so
+these are the sole producers of start/stop in the system.
 
 ## How to run
-Clone the repository: git clone https://github.com/Demo-AI-Edge-Crazy-Train/train-capture-image-app
-Navigate to the project directory: cd capture-app
-Run the application dev mode : ./mvnw clean quarkus:dev
 
-## How to use
-
-You can use any HTTP client to send requests to these endpoints. For example, you can use `curl`:
-
-```bash
-# Start the video capture
-curl -X 'POST' 'http://localhost:8082/capture/start' -H 'accept: */*'
+```sh
+git clone https://github.com/redhatnsp/train-capture-image-app
+cd train-capture-image-app/capture-app
+./mvnw clean quarkus:dev
 ```
 
-```bash
-# Stop the video capture
-curl -X 'POST' 'http://localhost:8082/capture/stop' -H 'accept: */*'
+Dev mode needs JDK 17; the Maven wrapper supplies Maven itself.
+
+### Test mode
+
+The `%dev` profile sets `capture.mock=true` and points `VIDEO_PATH` at a clip bundled in
+`src/main/resources/videos/`, so **`quarkus:dev` works with no webcam attached**. Use the
+`test` endpoint rather than `start` in this mode — `start` drives the camera, which is
+not initialised when mocking.
+
+```sh
+curl -X POST http://localhost:8082/capture/test    # read frames from the bundled video
+curl -X POST http://localhost:8082/capture/stop
 ```
 
-In order to test, you may need to change the following properties in your `application.properties` file:
+With a real camera:
 
-mock: This property should be set to true to enable the test mode where the application reads video from a file instead of capturing video from a camera.
-
-videoPath: This property should be set to the path of the video file that the application will read when the test mode is enabled.
-
-Here's an example of how you can set these properties:
-
-mp4
-Please replace /path/to/your/video/file.mp4 with the actual path of your video file.
-
-After you have updated the application.properties file, you can start the application and use the POST /capture/test endpoint to start reading video from the specified file.
-```bash
-# Start reading video from a file
-curl -X 'POST' 'http://localhost:8082/capture/test' -H 'accept: */*'
+```sh
+curl -X POST http://localhost:8082/capture/start
+curl -X POST http://localhost:8082/capture/stop
 ```
+
+Swagger UI is enabled (`quarkus.swagger-ui.always-include=true`).
+
+## Related Modules
+
+- **intelligent-train** — consumes `train-image`, runs the model, publishes detections.
+- **train-ceq-app** — turns detections into commands, and relays capture start/stop here.
+- **train-monitoring-app** — displays the annotated frames.
+- **train-controller** — drives the LEGO hub from the commands.
 
 ## Dependencies
-Capture-App has the following dependencies:
 
-- **OpenCV**: A library of programming functions mainly aimed at real-time computer vision. Used in this project for video capture and processing.
-- **Eclipse Paho MQTT Client**: A Java client library for MQTT. Used for sending the captured video data to the Intelligent-Train module.
-- **Quarkus**: A Kubernetes-native Java stack tailored for GraalVM and OpenJDK HotSpot, used for building lightweight and high-performance applications.
+- **Quarkus** — Kubernetes-native Java stack.
+- **OpenCV** via `quarkus-opencv` — frame capture, resizing and WebP encoding.
+- **Eclipse Paho MQTT client** — publishing frames.
 
-These dependencies are managed by Maven and are specified in the `pom.xml` file.
+Managed by Maven in `pom.xml`.
+
+## Known issues
+
+- `connectReconnect` returns HTTP 200 even when the command fails, and `oc` is not
+  present in either image.
+- The train control endpoints hardcode `localhost:1883` instead of using `MQTT_BROKER`.
+- `Dockerfile.opencv` still builds from
+  `quay.io/demo-ai-edge-crazy-train/openjdk-opencv:17-4.8.1`, in the old organisation.
+- `TMP_FOLDER` defaults to a personal path.
+- `Util.uploadToDropbox()` and `DropboxUploader` are unused but still pull the Dropbox
+  SDK into the build.
 
 ## License
-This project is licensed under the MIT License - see the LICENSE file for details.
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](../LICENSE)
+file for details.
